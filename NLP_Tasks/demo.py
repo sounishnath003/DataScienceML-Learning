@@ -1,149 +1,84 @@
-"""
-# _* coding: utf8 *_
 
-filename: cleanser.py
+import pandas as pd
+import torch
+import torch.utils.data
+from sklearn import model_selection, preprocessing
 
-@author: sounishnath
-createdAt: 2022-04-09 22:06:49
-"""
+from cleaner import TextCleanser
+from cnn_model import CNNNet
+from engine import Engine
+from tokenizer import TextTokenizer
+from wordembedding import NGramModelTrainer, NGramTokenBuilder, NGramsLanguageModel
 
+if __name__ == "__main__":
+    df = pd.read_csv("IMDB Dataset.csv", nrows=100)
+    cleanser = TextCleanser(texts=df['review'].values)
+    cleanser.remove_urls()
+    cleanser.remove_html_tags()
+    cleanser.remove_punctuations()
+    cleanser.remove_emoji_or_non_unicodes()
+    cleanser.remove_stop_words()
+    X = cleanser.perform_lemmatize()
 
-import gc
-import re
+    le = preprocessing.LabelEncoder()
+    df['review'] = le.fit_transform(df['sentiment'])
 
-import nltk
-from nltk.corpus import wordnet
-from sklearn import feature_extraction
-from tqdm import tqdm
+    tokenizer = TextTokenizer(
+        data=X,
+        num_words=20000,
+        sequence_length=400
+    )
 
+    tokenizer.build_vocabulary()
+    tokenizer.vectorize_sentences_by_vocabulary()
 
-class TextCleanser:
-    def __init__(self, texts) -> None:
-        gc.collect()
-        self.texts = [sentence.lower() for sentence in texts]
+    X = tokenizer.pad_sequences()
+    targets = df['review'].to_numpy()
 
-    def remove_html_tags(self):
-        gc.collect()
-        xclean = []
-        pattern = re.compile('<.*?>')
-        for sentence in tqdm(self.texts):
-            temptext = pattern.sub(r'', sentence)
-            xclean.append(temptext)
+    word_tokens = list(tokenizer.vocabulary.keys())
+    ngram_token_builder = NGramTokenBuilder(word_tokens=word_tokens, n_gram=2)
+    ngrams = ngram_token_builder.build_ngrams()
+    print("NGRAMS:", ngram_token_builder.get_ngrams()[-5:])
 
-        self.texts = xclean
-        return xclean
+    ngram_model = NGramsLanguageModel(word_tokens=word_tokens, vocab_size=len(word_tokens), embedding_dim=64, n_gram=2)
+    ngram_model_trainer = NGramModelTrainer(model=ngram_model, word_to_index=tokenizer.vocabulary, epochs=20)
+    ngram_model_trainer.train_loop()
 
-    def remove_urls(self):
-        gc.collect()
-        xclean = []
-        pattern = re.compile(r'https?://\S+|www\.\S+')
-        for sentence in tqdm(self.texts):
-            temptext = pattern.sub(r'', sentence)
-            xclean.append(temptext)
+    # # To get the embedding of a particular word, e.g. "random_vocabulary_word"
+    print(ngram_model.embedding.weight[tokenizer.vocabulary["superb"]])
 
-        self.texts = xclean
-        return xclean
+    xtrain, xtest, ytrain, ytest = model_selection.train_test_split(
+        X, targets, test_size=0.20, random_state=2022)
 
-    def remove_punctuations(self):
-        gc.collect()
-        xclean = []
-        excluders = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
-        for sentence in tqdm(self.texts):
-            temptext = sentence.translate(str.maketrans('', '', excluders))
-            xclean.append(temptext)
+    train_dataset = torch.utils.data.TensorDataset(
+        torch.tensor(xtrain),
+        torch.tensor(ytrain).long()
+    )
+    test_dataset = torch.utils.data.TensorDataset(
+        torch.tensor(xtest),
+        torch.tensor(ytest).long()
+    )
 
-        self.texts = xclean
-        return xclean
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=16, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=16, shuffle=True)
 
-    def remove_stop_words(self, custom_words=[]):
-        gc.collect()
-        self.stop_words = feature_extraction.text.ENGLISH_STOP_WORDS.union(
-            custom_words)
-        xclean = []
+    """
+    torch.Size([16, 400])
+    torch.Size([16])
+    """
 
-        for text in tqdm(self.texts):
-            words = list()
-            for sentence in nltk.sent_tokenize(text):
-                for word in nltk.word_tokenize(sentence):
-                    if not word in self.stop_words and word.isalpha():
-                        words.append(word)
-            sentence = " ".join(words)
-            xclean.append(sentence)
+    model = CNNNet(num_embedding=20000, embedding_dim=400)
+    print (model.parameters)
 
-        self.texts = xclean
-        return xclean
+    epochs: int = 50
+    lr: float = 0.001
+    optimizer = torch.optim.SGD(model.parameters(), lr)
+    criterion = torch.nn.BCELoss()
 
-    def remove_emoji_or_non_unicodes(self):
-        gc.collect()
-        emoji_pattern = re.compile("["
-                                   u"\U0001F600-\U0001F64F"  # emoticons
-                                   u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-                                   u"\U0001F680-\U0001F6FF"  # transport & map symbols
-                                   u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
-                                   u"\U00002702-\U000027B0"
-                                   u"\U000024C2-\U0001F251"
-                                   "]+", flags=re.UNICODE)
+    Engine.train_loop(model=model, data_loader=train_loader,
+                      criterion=criterion, optimizer=optimizer, epochs=epochs)
 
-        xclean = []
-        for text in tqdm(self.texts):
-            temptext = emoji_pattern.sub(r"", text)
-            xclean.append(temptext)
-
-        self.texts = xclean
-        return xclean
-
-    def perform_stem(self):
-        gc.collect()
-        xclean = []
-        ps = nltk.stem.PorterStemmer()
-        for text in tqdm(self.texts):
-            temptext = " ".join([ps.stem(word)
-                                for word in nltk.word_tokenize(text)])
-            xclean.append(temptext)
-
-        self.texts = xclean
-        return xclean
-
-    def get_wordnet_pos(self, word):
-        """Map POS tag to first character lemmatize() accepts"""
-        tag = nltk.pos_tag([word])[0][1][0].upper()
-        tag_dict = {"J": wordnet.ADJ,
-                    "N": wordnet.NOUN,
-                    "V": wordnet.VERB,
-                    "R": wordnet.ADV}
-        return tag_dict.get(tag, wordnet.NOUN)
-
-    def perform_lemmatize(self):
-        gc.collect()
-        xclean = []
-        wnl = nltk.stem.WordNetLemmatizer()
-        for text in tqdm(self.texts):
-            temptext = " ".join([wnl.lemmatize(word, self.get_wordnet_pos(word))
-                                for word in nltk.word_tokenize(text)])
-            xclean.append(temptext)
-
-        self.texts = xclean
-        return xclean
-
-
-    def clean_everything_by_process(self, c_type='lemma'):
-        self.remove_urls()
-        print('removing urls done...')
-        self.remove_html_tags()
-        print('removing html tags done...')
-        self.remove_punctuations()
-        print('removing punctuations done...')
-        self.remove_emoji_or_non_unicodes()
-        print('removing non unicoded characters done...')
-
-        if c_type == 'lemma':
-            self.perform_lemmatize()
-        elif c_type == 'stem':
-            self.perform_stem()
-        print(f'transforming texts to {c_type} done...')
-
-        xclean = self.remove_stop_words()
-        print('removing stop-words done...')
-
-        self.texts = xclean
-        return xclean
+    Engine.eval_loop(model=model, data_loader=test_loader,
+                      criterion=criterion, optimizer=optimizer, epochs=epochs)

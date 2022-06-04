@@ -60,13 +60,14 @@ class CompanyRecomenderModel(tez.Model):
     def __init__(self, n_job_title, n_location, n_classes, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Cat: ['Job Title', 'Location']
-        self.jobs_embeddings = nn.Embedding(n_job_title, 64)
-        self.location_embeddings = nn.Embedding(n_location, 64)
-        self.normalizer = nn.BatchNorm1d(130)
-        self.dense1 = nn.Linear(130, 256)
+        self.jobs_embeddings = nn.Embedding(n_job_title+1, 32)
+        self.location_embeddings = nn.Embedding(n_location+1, 32)
+        self.normalizer = nn.BatchNorm1d(66)
+        self.dense1 = nn.Linear(66, 128)
         self.dropout = nn.Dropout(p=0.10)
-        self.classifer = nn.Linear(256, n_classes)
+        self.classifer = nn.Linear(128, n_classes)
         self.step_scheduler_after = "epoch"
+        self.best_accuracy=0
 
     def fetch_optimizer(self, *args, **kwargs):
         opt = torch.optim.Adam(params=self.parameters(), lr=1e-3)
@@ -102,6 +103,12 @@ class CompanyRecomenderModel(tez.Model):
 
         compute_loss = nn.CrossEntropyLoss()(y_out, company)
         compute_metrics = self.monitor_metrics(y_out, company)
+
+        with torch.no_grad():
+            if compute_metrics.get('accuracy') > self.best_accuracy:
+                self.save("model.bin", weights_only=True)
+                self.best_accuracy=compute_metrics.get('accuracy')
+                print(f'new model weights saved with score={self.best_accuracy:0.2f} at epoch: {self.current_epoch}')
         return y_out, compute_loss, compute_metrics
 
 

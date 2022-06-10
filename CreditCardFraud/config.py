@@ -1,0 +1,6 @@
+DEVICE = "cpu"
+TRAINING_FILE = "./input/creditcard.csv"
+TRAIN_BATCH_SIZE = 1024
+VALID_BATCH_SIZE = 1024
+EPOCHS = 3
+FOLD = 1

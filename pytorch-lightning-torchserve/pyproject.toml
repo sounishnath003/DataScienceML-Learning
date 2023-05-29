@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "torchh"
+version = "0.1.0"
+description = ""
+authors = ["Sounish Nath <flock.sinasini@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+torch = "^2.0.1"
+pytorch-lightning = "^2.0.2"
+scikit-learn = "^1.2.2"
+pandas = "^2.0.1"
+huggingface-hub = "^0.14.1"
+transformers = "^4.29.2"
+torchserve = "^0.8.0"
+torch-model-archiver = "^0.8.0"
+torch-workflow-archiver = "^0.2.8"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

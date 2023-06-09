@@ -1,0 +1,12 @@
+unstructured==0.7.1
+google-cloud-storage==2.9.0
+google-auth==2.19.1
+langchain==0.0.189
+google-cloud-aiplatform==1.25.0
+huggingface-hub==0.15.1
+torch==2.0.1
+torchvision==0.15.2
+tqdm==4.65.0
+transformers==4.29.2
+pdfplumber==0.9.0
+sentence_transformers

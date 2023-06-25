@@ -43,7 +43,7 @@ class Config:
     MAX_LENGTH = 32
     NUM_CLASSES = 5
     NUM_EPOCHS = 1
-    LEARNING_RATE = 5e-4
+    LEARNING_RATE = 3e-5
     NUM_WORKERS = os.cpu_count()
     TOKENIZER = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
@@ -248,13 +248,13 @@ class SentimentAnalyzerDeepNeuralNetLightning(pl.LightningModule):
             loss = nn.CrossEntropyLoss()(ypreds, target)
             accuracy = torchmetrics.Accuracy(
                 task="multiclass", threshold=0.67, num_classes=self._num_classes
-            )(ypreds.detach().cpu(), target.detach().cpu())
+            )(ypreds.detach().cpu().argmax(dim=1), target.detach().cpu())
             f1 = torchmetrics.F1Score(
                 task="multiclass",
                 threshold=0.67,
                 num_classes=self._num_classes,
                 average="macro",
-            )(ypreds.detach().cpu(), target.detach().cpu())
+            )(ypreds.detach().cpu().argmax(dim=1), target.detach().cpu())
 
         return (
             ypreds,

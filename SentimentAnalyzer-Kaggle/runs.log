@@ -1,0 +1,98 @@
+INFO:SentimentAnalysisLightning:SentimentAnalyzerDeepNeuralNetLightning(
+  (model): SentimentAnalyzerDeepNeuralNet(
+    (foundation_model): DistilBertForMaskedLM(
+      (activation): GELUActivation()
+      (distilbert): DistilBertModel(
+        (embeddings): Embeddings(
+          (word_embeddings): Embedding(30522, 768, padding_idx=0)
+          (position_embeddings): Embedding(512, 768)
+          (LayerNorm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+        )
+        (transformer): Transformer(
+          (layer): ModuleList(
+            (0-5): 6 x TransformerBlock(
+              (attention): MultiHeadSelfAttention(
+                (dropout): Dropout(p=0.1, inplace=False)
+                (q_lin): Linear(in_features=768, out_features=768, bias=True)
+                (k_lin): Linear(in_features=768, out_features=768, bias=True)
+                (v_lin): Linear(in_features=768, out_features=768, bias=True)
+                (out_lin): Linear(in_features=768, out_features=768, bias=True)
+              )
+              (sa_layer_norm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+              (ffn): FFN(
+                (dropout): Dropout(p=0.1, inplace=False)
+                (lin1): Linear(in_features=768, out_features=3072, bias=True)
+                (lin2): Linear(in_features=3072, out_features=768, bias=True)
+                (activation): GELUActivation()
+              )
+              (output_layer_norm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+            )
+          )
+        )
+      )
+      (vocab_transform): Linear(in_features=768, out_features=768, bias=True)
+      (vocab_layer_norm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+      (vocab_projector): Linear(in_features=768, out_features=30522, bias=True)
+      (mlm_loss_fct): CrossEntropyLoss()
+    )
+    (sentiment_classifier_layer): Sequential(
+      (0): Sequential(
+        (0): Dropout(p=0.25, inplace=False)
+        (1): MaxPool2d(kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), dilation=1, ceil_mode=False)
+        (2): Linear(in_features=15261, out_features=2048, bias=True)
+        (3): Dropout(p=0.25, inplace=False)
+        (4): Linear(in_features=2048, out_features=2048, bias=True)
+        (5): LayerNorm((2048,), eps=1e-05, elementwise_affine=True)
+        (6): MaxPool2d(kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), dilation=1, ceil_mode=False)
+        (7): ReLU()
+        (8): Dropout(p=0.25, inplace=False)
+      )
+      (1): Sequential(
+        (0): Flatten(start_dim=1, end_dim=-1)
+        (1): Linear(in_features=8192, out_features=2048, bias=True)
+        (2): Dropout(p=0.25, inplace=False)
+        (3): Linear(in_features=2048, out_features=512, bias=True)
+        (4): ReLU()
+        (5): Linear(in_features=512, out_features=5, bias=True)
+      )
+    )
+  )
+)
+INFO:SentimentAnalysisDatasetLit:================================================================================
+INFO:SentimentAnalysisDatasetLit:shape: (124848, 5)
+INFO:SentimentAnalysisDatasetLit:columns: Index(['PhraseId', 'SentenceId', 'Phrase', 'Sentiment', 'kfold'], dtype='object')
+INFO:SentimentAnalysisDatasetLit:sample:
+         PhraseId  SentenceId                                             Phrase  Sentiment  kfold
+15770      15771         676                                   in Birthday Girl          2      3
+150014    150015        8170                    is both a snore and utter tripe          0      3
+10749      10750         457  Sweet Home Alabama is n't going to win any Aca...          2      2
+13105      13106         563                          's not completely wreaked          2      0
+135419    135420        7314  Halloween : Resurrection is n't exactly qualit...          2      2
+INFO:SentimentAnalysisDatasetLit:================================================================================
+INFO:SentimentAnalysisDatasetLit:
+INFO:SentimentAnalysisDatasetLit:================================================================================
+INFO:SentimentAnalysisDatasetLit:shape: (31212, 5)
+INFO:SentimentAnalysisDatasetLit:columns: Index(['PhraseId', 'SentenceId', 'Phrase', 'Sentiment', 'kfold'], dtype='object')
+INFO:SentimentAnalysisDatasetLit:sample:
+        PhraseId  SentenceId                                             Phrase  Sentiment  kfold
+77868     77869        4005                      A thought-provoking picture .          4      4
+21773     21774         973                                            unfunny          1      4
+65910     65911        3342     a surprising , subtle turn at the midway point          3      4
+2273       2274          87  Highly recommended viewing for its courage , i...          4      4
+26302     26303        1204                              special-effects-laden          2      4
+INFO:SentimentAnalysisDatasetLit:================================================================================
+INFO:SentimentAnalysisDatasetLit:
+INFO:SentimentAnalysisDatasetLit:================================================================================
+INFO:SentimentAnalysisDatasetLit:shape: (66292, 3)
+INFO:SentimentAnalysisDatasetLit:columns: Index(['PhraseId', 'SentenceId', 'Phrase'], dtype='object')
+INFO:SentimentAnalysisDatasetLit:sample:
+        PhraseId  SentenceId                                             Phrase
+18360    174421        9356  I can remember to personifying independence in...
+52078    208139       11070  think twice about immigrants we see around us ...
+5759     161820        8761  For me , this opera is n't a favorite , so it ...
+2022     158083        8614                                     the video game
+62247    218308       11632                                   The lack of pace
+INFO:SentimentAnalysisDatasetLit:================================================================================
+INFO:SentimentAnalysisDatasetLit:
+INFO:root:[{'test_loss_epoch': 4.034567832946777, 'accuracy_epoch': 0.71875, 'f1_epoch': 0.16727271676063538}]

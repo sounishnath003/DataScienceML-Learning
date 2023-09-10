@@ -9,16 +9,12 @@ createdAt: 2023-09-09 11:43:20
 
 import logging
 import os
-import traceback
 from dataclasses import dataclass
-from typing import Any, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchmetrics
 from lightning import pytorch as pl
-from lightning.pytorch.utilities.types import STEP_OUTPUT
 from recurrent_variation_autoencoder import (
     RecurrentVariationAutoEncoderTimeseriesClusteringLit,
     TimeseriesDataSet,

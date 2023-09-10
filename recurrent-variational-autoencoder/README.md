@@ -63,6 +63,8 @@ INFO:[RecurrentVariationAutoEncoderModel]:{'TOTAL_SAMPLES': 1000, 'NUM_OF_FEATUR
 
 ## PyTorch Model Architecture - Lightning
 
+![reference-implementation](https://pbs.twimg.com/media/F5peyhOasAA59uK?format=jpg&name=4096x4096)
+
 ```
 RecurrentVariationAutoEncoderTimeseriesClusteringLit(
   (encoder_model): Encoder(
@@ -111,6 +113,58 @@ Testing DataLoader 0: 100%|█████████████████�
 └───────────────────────────┴───────────────────────────┘
 [{'loss': 1.0564305782318115, 'kl_loss': 0.03689521923661232}]
 ```
+
+## Build an Inference API Endpoint using Torchserve
+
+![](https://d2908q01vomqb2.cloudfront.net/f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59/2020/04/20/deploying-pytorch-torchserve-1-2.gif)
+
+**TorchServe: A Performant and Flexible Tool for Serving PyTorch Models in Production:**
+TorchServe is a performant, flexible, and easy-to-use tool for serving PyTorch models in production. It can be used to deploy models to a variety of environments, including on-premises, cloud, and edge devices. TorchServe also supports a variety of features, such as multi-model serving, model versioning, and A/B testing.
+
+**Flask v/s Torchserve:**
+Flask is a general-purpose web framework that can be used to serve any type of model. It is easy to learn and use, but it is not as performant as TorchServe. Flask also does not support as many features as TorchServe.
+
+**Flask v/s Torchserv:e**
+FastAPI is a newer web framework that is designed to be both fast and easy to use. It is similar to Flask in terms of its ease of use, but it is much more performant. FastAPI also supports a variety of features, such as asynchronous programming and OpenAPI documentation.
+
+Here is a table that summarizes the strengths and weaknesses of each framework:
+
+| Framwork   | Strengths                                                                      | Weakness                                                           |
+|------------|--------------------------------------------------------------------------------|--------------------------------------------------------------------|
+| TorchServe | Highly performant, supports a variety of features                              | Designed specifically for PyTorch models, can be complex to set up |
+| Flask      | Easy to learn and use, can be used to serve any type of model                  | Not as performant as TorchServe, does not support as many features |
+| FastAPI    | Fast, easy to use, supports asynchronous programming and OpenAPI documentation | Not as well-known as Flask or TorchServe                           |
+
+## Torchserve CLI Demo
+
+```
+#!/usr/bin/bash
+
+poetry run torchserve --stop
+poetry run black .
+clear
+poetry run torch-model-archiver \
+    --model-name=rvae-neuralnet \
+    --version=1.0 \
+    --model-file=./recurrent_variation_autoencoder/model.py \
+    --serialized-file=./lightning_logs/version_0/checkpoints/epoch=1-step=20.ckpt \
+    --handler rvae_endpoint.py \
+
+rm -fr model_store logs
+mkdir model_store
+mv rvae-neuralnet.mar model_store
+
+poetry run torchserve --start \
+    --model-store model_store \
+    --models rvae-neuralnet.mar \
+    --ncs
+
+
+curl -X POST http://localhost:8080/predictions/rvae-neuralnet \
+   -H "Content-Type: application/json" \
+   -d '{"data": ["timeseries-data-for-inference-sample"]}'  
+```
+
 
 ## Generative Audio Example: (interesting example by research authors - YT)
 

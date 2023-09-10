@@ -10,6 +10,9 @@ packages = [{include = "recurrent_variation_autoencoder"}]
 python = "^3.9"
 lightning = "^2.0.8"
 torchmetrics = "^1.0.3"
+torchserve = "^0.8.2"
+torch-model-archiver = "^0.8.2"
+torch-workflow-archiver = "^0.2.10"
 
 
 [tool.poetry.group.dev.dependencies]

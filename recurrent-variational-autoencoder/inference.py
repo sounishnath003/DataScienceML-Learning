@@ -49,7 +49,7 @@ if __name__ == "__main__":
         learning_rate=Configuration.LEARNING_RATE,
         dropout=Configuration.DROPOUT,
     )
-    lit_model.freeze()
+    lit_model.eval()
 
     trainer = pl.Trainer()
     predict_dataloader = DataLoader(
@@ -59,5 +59,6 @@ if __name__ == "__main__":
         num_workers=1,
         drop_last=True,
     )
-    preds = trainer.test(lit_model, predict_dataloader, verbose=True)
-    print(preds)
+    with torch.no_grad():
+        preds = trainer.test(lit_model, predict_dataloader, verbose=True)
+        print(preds)

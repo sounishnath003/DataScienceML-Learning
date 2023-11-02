@@ -1,7 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz@9..40&display=swap');
+
 :root {
   /* font-family:  product sans; */
-  font-weight: 400;
+  /* font-weight: 400; */
   font-size: 1.15rem;
+  font-family: 'DM Sans', sans-serif;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;

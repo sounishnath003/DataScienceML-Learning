@@ -1,0 +1,6 @@
+
+__pycache__
+*.lock
+.venv
+.dockerignore
+Dockerfile

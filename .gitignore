@@ -1,0 +1,16 @@
+
+__pycache__
+.venv
+venv
+logs
+lightning_logs
+*.ckpt
+*.pyc
+*.bin
+*.ipynb_notebooks
+checkpoints
+*.csv
+*.zip
+
+ml-100k
+

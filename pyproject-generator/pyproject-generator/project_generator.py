@@ -32,7 +32,7 @@ def run():
     logging.info("===================================")
 
     project_files_to_be_provisioned = [
-        "training-data/store"
+        "training_data/store",
         "artifacts/kubeflow_store/store",
         "setup.py",
         "test.py",
@@ -44,7 +44,7 @@ def run():
         "trainer/data_cleanser.py",
         "trainer/dataset.py",
         "trainer/model.py",
-        "trainer/lightning.py",
+        "trainer/lightning_model.py",
         "main.py",
         "inference.py",
         "torchserve/custom_inference_handler.py",

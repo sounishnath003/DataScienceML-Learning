@@ -32,6 +32,7 @@ def run():
     logging.info("===================================")
 
     project_files_to_be_provisioned = [
+        "training-data/store"
         "artifacts/kubeflow_store/store",
         "setup.py",
         "test.py",

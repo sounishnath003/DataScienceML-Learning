@@ -19,7 +19,7 @@ def run():
     logging.info("===================================")
 
     project_files_to_be_provisioned = [
-        "artifacts",
+        "artifacts/store",
         "setup.py",
         "test.py",
         "logs/activity.log",
@@ -32,6 +32,7 @@ def run():
         "trainer/model.py",
         "trainer/lightning.py",
         "main.py",
+        "inference.py",
         "config/__init__.py",
         "config/config.py",
         "notebooks/research.ipynb",

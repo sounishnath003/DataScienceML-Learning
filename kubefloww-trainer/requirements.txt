@@ -1,0 +1,14 @@
+
+pip
+kfp
+transformers
+lightning
+torchmetrics
+scikit-learn
+black
+datasets
+torchserve
+torch-model-archiver
+ipykernel
+matplotlib
+pytorch-kfp-components

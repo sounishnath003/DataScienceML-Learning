@@ -1,0 +1,423 @@
+# PIPELINE DEFINITION
+# Name: kubefloww-trainer
+# Description: a kubeflow description
+# Outputs:
+#    train-model-metrics_out: system.Metrics
+components:
+  comp-generate-dataset:
+    executorLabel: exec-generate-dataset
+    outputDefinitions:
+      artifacts:
+        dataset_out:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-setup-dataloaders:
+    executorLabel: exec-setup-dataloaders
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        lit_logger_out:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        lit_model_out:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        metrics_out:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+        model_checkpoint_out:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+defaultPipelineRoot: /Users/sounishnath/Developer/kubefloww-trainer/artifacts/kubeflow_store/create-pipeline.yaml
+deploymentSpec:
+  executors:
+    exec-generate-dataset:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - generate_dataset
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.4.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'transformers'\
+          \ 'lightning' 'torchmetrics' 'scikit-learn' 'black' 'datasets' 'torchserve'\
+          \ 'torch-model-archiver' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef generate_dataset(dataset_out: Output[Artifact]):\n    from datasets\
+          \ import load_dataset\n    import os\n    import sys\n    import tarfile\n\
+          \    import time\n\n    import numpy as np\n    import pandas as pd\n  \
+          \  from packaging import version\n    from torch.utils.data import Dataset\n\
+          \    from tqdm import tqdm\n    import urllib\n\n    from transformers import\
+          \ AutoTokenizer\n\n    def reporthook(count, block_size, total_size):\n\
+          \        global start_time\n        if count == 0:\n            start_time\
+          \ = time.time()\n            return\n        duration = time.time() - start_time\n\
+          \        progress_size = int(count * block_size)\n        speed = progress_size\
+          \ / (1024.0**2 * duration)\n        percent = count * block_size * 100.0\
+          \ / total_size\n\n        sys.stdout.write(\n            f\"\\r{int(percent)}%\
+          \ | {progress_size / (1024.**2):.2f} MB \"\n            f\"| {speed:.2f}\
+          \ MB/s | {duration:.2f} sec elapsed\"\n        )\n        sys.stdout.flush()\n\
+          \n    def download_dataset():\n        source = \"http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz\"\
+          \n        target = \"aclImdb_v1.tar.gz\"\n\n        if os.path.exists(target):\n\
+          \            os.remove(target)\n\n        if not os.path.isdir(\"aclImdb\"\
+          ) and not os.path.isfile(\"aclImdb_v1.tar.gz\"):\n            urllib.request.urlretrieve(source,\
+          \ target, reporthook)\n\n        if not os.path.isdir(\"aclImdb\"):\n  \
+          \          with tarfile.open(target, \"r:gz\") as tar:\n               \
+          \ tar.extractall()\n\n    def load_dataset_into_to_dataframe():\n      \
+          \  basepath = \"aclImdb\"\n\n        labels = {\"pos\": 1, \"neg\": 0}\n\
+          \n        df = pd.DataFrame()\n\n        with tqdm(total=50000) as pbar:\n\
+          \            for s in (\"test\", \"train\"):\n                for l in (\"\
+          pos\", \"neg\"):\n                    path = os.path.join(basepath, s, l)\n\
+          \                    for file in sorted(os.listdir(path)):\n           \
+          \             with open(\n                            os.path.join(path,\
+          \ file), \"r\", encoding=\"utf-8\"\n                        ) as infile:\n\
+          \                            txt = infile.read()\n\n                   \
+          \     if version.parse(pd.__version__) >= version.parse(\"1.3.2\"):\n  \
+          \                          x = pd.DataFrame(\n                         \
+          \       [[txt, labels[l]]], columns=[\"review\", \"sentiment\"]\n      \
+          \                      )\n                            df = pd.concat([df,\
+          \ x], ignore_index=False)\n\n                        else:\n           \
+          \                 df = df.append([[txt, labels[l]]], ignore_index=True)\n\
+          \                        pbar.update()\n        df.columns = [\"text\",\
+          \ \"label\"]\n\n        np.random.seed(0)\n        df = df.reindex(np.random.permutation(df.index))\n\
+          \n        print(\"Class distribution:\")\n        np.bincount(df[\"label\"\
+          ].values)\n\n        return df\n\n    def partition_dataset(df):\n     \
+          \   df_shuffled = df.sample(frac=1, random_state=1).reset_index()\n\n  \
+          \      df_train = df_shuffled.iloc[:35_000]\n        df_val = df_shuffled.iloc[35_000:40_000]\n\
+          \        df_test = df_shuffled.iloc[40_000:]\n\n        df_train.to_csv(\"\
+          train.csv\", index=False, encoding=\"utf-8\")\n        df_val.to_csv(\"\
+          val.csv\", index=False, encoding=\"utf-8\")\n        df_test.to_csv(\"test.csv\"\
+          , index=False, encoding=\"utf-8\")\n\n    def tokenize_text(batch):\n  \
+          \      return tokenizer(batch[\"text\"], truncation=True, padding=True)\n\
+          \n    download_dataset()\n    dfx = load_dataset_into_to_dataframe()\n\n\
+          \    if not (\n        os.path.exists(\"train.csv\")\n        and os.path.exists(\"\
+          val.csv\")\n        and os.path.exists(\"test.csv\")\n    ):\n        partition_dataset(dfx)\n\
+          \n    imdb_dataset = load_dataset(\n        \"csv\",\n        data_files={\n\
+          \            \"train\": \"train.csv\",\n            \"validation\": \"val.csv\"\
+          ,\n            \"test\": \"test.csv\",\n        },\n    )\n\n    tokenizer\
+          \ = AutoTokenizer.from_pretrained(\"distilbert-base-uncased\")\n    print(\"\
+          Tokenizer input max length:\", tokenizer.model_max_length, flush=True)\n\
+          \    print(\"Tokenizer vocabulary size:\", tokenizer.vocab_size, flush=True)\n\
+          \n    print(\"Tokenizing ...\", flush=True)\n    imdb_tokenized = imdb_dataset.map(tokenize_text,\
+          \ batched=True, batch_size=None)\n    del imdb_dataset\n    imdb_tokenized.set_format(\"\
+          torch\", columns=[\"input_ids\", \"attention_mask\", \"label\"])\n    os.environ[\"\
+          TOKENIZERS_PARALLELISM\"] = \"false\"\n\n    imdb_tokenized.save_to_disk(dataset_out.path)\n\
+          \    print(\"dataset has been tokenized and saved inside {}\".format(dataset_out.path))\n\
+          \n"
+        image: python:3.11-slim
+    exec-setup-dataloaders:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - setup_dataloaders
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.4.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'transformers'\
+          \ 'lightning' 'torchmetrics' 'scikit-learn' 'black' 'datasets' 'torchserve'\
+          \ 'torch-model-archiver' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef setup_dataloaders(\n    dataset: Input[Artifact],\n):\n    import\
+          \ os\n    import torch\n    from datasets import load_dataset\n    from\
+          \ torch.utils.data import Dataset, DataLoader\n\n    class IMDBDataset(Dataset):\n\
+          \        def __init__(self, dataset_dict, partition_key=\"train\"):\n  \
+          \          self.partition = dataset_dict[partition_key]\n\n        def __getitem__(self,\
+          \ index):\n            return self.partition[index]\n\n        def __len__(self):\n\
+          \            return self.partition.num_rows\n\n    os.environ[\"TOKENIZERS_PARALLELISM\"\
+          ] = \"false\"\n    imdb_tokenized = load_dataset(dataset.path)\n\n    train_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"train\")\n    val_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"validation\")\n    test_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"test\")\n\n    train_loader\
+          \ = DataLoader(\n        dataset=train_dataset,\n        batch_size=12,\n\
+          \        shuffle=True,\n        num_workers=1,\n        drop_last=True,\n\
+          \    )\n\n    val_loader = DataLoader(\n        dataset=val_dataset,\n \
+          \       batch_size=12,\n        num_workers=1,\n        drop_last=True,\n\
+          \    )\n\n    test_loader = DataLoader(\n        dataset=test_dataset,\n\
+          \        batch_size=12,\n        num_workers=1,\n        drop_last=True,\n\
+          \    )\n\n"
+        image: python:3.11-slim
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.4.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'transformers'\
+          \ 'lightning' 'torchmetrics' 'scikit-learn' 'black' 'datasets' 'torchserve'\
+          \ 'torch-model-archiver' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    dataset: Input[Artifact],\n    lit_logger_out:\
+          \ Output[Artifact],\n    model_checkpoint_out: Output[Artifact],\n    lit_model_out:\
+          \ Output[Model],\n    metrics_out: Output[Metrics],\n):\n    from datasets\
+          \ import load_dataset\n    import os\n    import sys\n    import tarfile\n\
+          \    import time\n\n    import numpy as np\n    import pandas as pd\n  \
+          \  from packaging import version\n    from torch.utils.data import Dataset\n\
+          \    from tqdm import tqdm\n    import urllib\n\n    from transformers import\
+          \ AutoTokenizer\n\n    def reporthook(count, block_size, total_size):\n\
+          \        global start_time\n        if count == 0:\n            start_time\
+          \ = time.time()\n            return\n        duration = time.time() - start_time\n\
+          \        progress_size = int(count * block_size)\n        speed = progress_size\
+          \ / (1024.0**2 * duration)\n        percent = count * block_size * 100.0\
+          \ / total_size\n\n        sys.stdout.write(\n            f\"\\r{int(percent)}%\
+          \ | {progress_size / (1024.**2):.2f} MB \"\n            f\"| {speed:.2f}\
+          \ MB/s | {duration:.2f} sec elapsed\"\n        )\n        sys.stdout.flush()\n\
+          \n    def download_dataset():\n        source = \"http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz\"\
+          \n        target = \"aclImdb_v1.tar.gz\"\n\n        if os.path.exists(target):\n\
+          \            os.remove(target)\n\n        if not os.path.isdir(\"aclImdb\"\
+          ) and not os.path.isfile(\"aclImdb_v1.tar.gz\"):\n            urllib.request.urlretrieve(source,\
+          \ target, reporthook)\n\n        if not os.path.isdir(\"aclImdb\"):\n  \
+          \          with tarfile.open(target, \"r:gz\") as tar:\n               \
+          \ tar.extractall()\n\n    def load_dataset_into_to_dataframe():\n      \
+          \  basepath = \"aclImdb\"\n\n        labels = {\"pos\": 1, \"neg\": 0}\n\
+          \n        df = pd.DataFrame()\n\n        with tqdm(total=50000) as pbar:\n\
+          \            for s in (\"test\", \"train\"):\n                for l in (\"\
+          pos\", \"neg\"):\n                    path = os.path.join(basepath, s, l)\n\
+          \                    for file in sorted(os.listdir(path)):\n           \
+          \             with open(\n                            os.path.join(path,\
+          \ file), \"r\", encoding=\"utf-8\"\n                        ) as infile:\n\
+          \                            txt = infile.read()\n\n                   \
+          \     if version.parse(pd.__version__) >= version.parse(\"1.3.2\"):\n  \
+          \                          x = pd.DataFrame(\n                         \
+          \       [[txt, labels[l]]], columns=[\"review\", \"sentiment\"]\n      \
+          \                      )\n                            df = pd.concat([df,\
+          \ x], ignore_index=False)\n\n                        else:\n           \
+          \                 df = df.append([[txt, labels[l]]], ignore_index=True)\n\
+          \                        pbar.update()\n        df.columns = [\"text\",\
+          \ \"label\"]\n\n        np.random.seed(0)\n        df = df.reindex(np.random.permutation(df.index))\n\
+          \n        print(\"Class distribution:\")\n        np.bincount(df[\"label\"\
+          ].values)\n\n        return df\n\n    def partition_dataset(df):\n     \
+          \   df_shuffled = df.sample(frac=1, random_state=1).reset_index()\n\n  \
+          \      df_train = df_shuffled.iloc[:35_000]\n        df_val = df_shuffled.iloc[35_000:40_000]\n\
+          \        df_test = df_shuffled.iloc[40_000:]\n\n        df_train.to_csv(\"\
+          train.csv\", index=False, encoding=\"utf-8\")\n        df_val.to_csv(\"\
+          val.csv\", index=False, encoding=\"utf-8\")\n        df_test.to_csv(\"test.csv\"\
+          , index=False, encoding=\"utf-8\")\n\n    def tokenize_text(batch):\n  \
+          \      return tokenizer(batch[\"text\"], truncation=True, padding=True)\n\
+          \n    download_dataset()\n    dfx = load_dataset_into_to_dataframe()\n\n\
+          \    if not (\n        os.path.exists(\"train.csv\")\n        and os.path.exists(\"\
+          val.csv\")\n        and os.path.exists(\"test.csv\")\n    ):\n        partition_dataset(dfx)\n\
+          \n    imdb_dataset = load_dataset(\n        \"csv\",\n        data_files={\n\
+          \            \"train\": \"train.csv\",\n            \"validation\": \"val.csv\"\
+          ,\n            \"test\": \"test.csv\",\n        },\n    )\n\n    tokenizer\
+          \ = AutoTokenizer.from_pretrained(\"distilbert-base-uncased\")\n    print(\"\
+          Tokenizer input max length:\", tokenizer.model_max_length, flush=True)\n\
+          \    print(\"Tokenizer vocabulary size:\", tokenizer.vocab_size, flush=True)\n\
+          \n    print(\"Tokenizing ...\", flush=True)\n    imdb_tokenized = imdb_dataset.map(tokenize_text,\
+          \ batched=True, batch_size=None)\n    del imdb_dataset\n    imdb_tokenized.set_format(\"\
+          torch\", columns=[\"input_ids\", \"attention_mask\", \"label\"])\n    os.environ[\"\
+          TOKENIZERS_PARALLELISM\"] = \"false\"\n\n    # imdb_tokenized.save_to_disk(dataset_out.path)\n\
+          \    # print(\"dataset has been tokenized and saved inside {}\".format(dataset_out.path))\n\
+          \n    from datasets import load_dataset\n    from torch.utils.data import\
+          \ Dataset, DataLoader\n\n    import os\n    import torch\n    import torch.nn\
+          \ as nn\n    import torchmetrics\n    from lightning import pytorch as pl\n\
+          \    from transformers import (\n        AutoModelForSequenceClassification,\n\
+          \        AutoTokenizer,\n        AutoModel,\n    )\n\n    from lightning.pytorch.callbacks\
+          \ import ModelCheckpoint\n    from lightning.pytorch.loggers import CSVLogger\n\
+          \n    class LightningModel(pl.LightningModule):\n        def __init__(self,\
+          \ model, learning_rate=5e-5):\n            super().__init__()\n\n      \
+          \      self.learning_rate = learning_rate\n            self.pretrained_model\
+          \ = model\n            self.classifier = nn.Sequential(\n              \
+          \  nn.Linear(768, 768), nn.ReLU(), nn.Dropout(0.20), nn.Linear(768, 2)\n\
+          \            )\n\n            self.train_acc = torchmetrics.Accuracy(task=\"\
+          multiclass\", num_classes=2)\n            self.val_acc = torchmetrics.Accuracy(task=\"\
+          multiclass\", num_classes=2)\n            self.test_acc = torchmetrics.Accuracy(task=\"\
+          multiclass\", num_classes=2)\n\n        def forward(self, input_ids, attention_mask,\
+          \ labels):\n            hidden_logits = self.pretrained_model.forward(\n\
+          \                input_ids, attention_mask=attention_mask\n            )[0]\n\
+          \            pooled_output = hidden_logits[:, 0]\n            logits = self.classifier.forward(pooled_output)\n\
+          \            loss = None\n\n            if not labels is None:\n       \
+          \         loss = nn.CrossEntropyLoss()(\n                    logits.to(self.device),\
+          \ labels.view(-1).to(self.device)\n                )\n\n            return\
+          \ {\"logits\": logits, \"loss\": loss}\n\n        def training_step(self,\
+          \ batch, batch_idx):\n            outputs = self(\n                batch[\"\
+          input_ids\"],\n                attention_mask=batch[\"attention_mask\"],\n\
+          \                labels=batch[\"label\"],\n            )\n            self.log(\"\
+          train_loss\", outputs[\"loss\"])\n            with torch.no_grad():\n  \
+          \              logits = outputs[\"logits\"]\n                predicted_labels\
+          \ = torch.argmax(logits, 1)\n                acc = self.train_acc(predicted_labels,\
+          \ batch[\"label\"])\n                self.log(\"train_acc\", acc, on_epoch=True,\
+          \ on_step=False)\n                self.log_dict(\n                    {\"\
+          loss\": outputs[\"loss\"], \"train_acc\": acc},\n                    on_epoch=True,\n\
+          \                    on_step=False,\n                )\n            return\
+          \ outputs[\"loss\"]  # this is passed to the optimizer for training\n\n\
+          \        def validation_step(self, batch, batch_idx):\n            outputs\
+          \ = self(\n                batch[\"input_ids\"],\n                attention_mask=batch[\"\
+          attention_mask\"],\n                labels=batch[\"label\"],\n         \
+          \   )\n            self.log(\"val_loss\", outputs[\"loss\"], prog_bar=True)\n\
+          \n            logits = outputs[\"logits\"]\n            predicted_labels\
+          \ = torch.argmax(logits, 1)\n            acc = self.val_acc(predicted_labels,\
+          \ batch[\"label\"])\n            self.log_dict(\n                {\"loss\"\
+          : outputs[\"loss\"], \"train_acc\": acc},\n                on_epoch=True,\n\
+          \                on_step=False,\n            )\n            self.log(\"\
+          val_acc\", acc, prog_bar=True)\n\n        def test_step(self, batch, batch_idx):\n\
+          \            outputs = self(\n                batch[\"input_ids\"],\n  \
+          \              attention_mask=batch[\"attention_mask\"],\n             \
+          \   labels=batch[\"label\"],\n            )\n\n            logits = outputs[\"\
+          logits\"]\n            predicted_labels = torch.argmax(logits, 1)\n    \
+          \        acc = self.test_acc(predicted_labels, batch[\"label\"])\n     \
+          \       self.log(\"accuracy\", acc, prog_bar=True)\n\n        def configure_optimizers(self):\n\
+          \            optimizer = torch.optim.Adam(\n                self.trainer.model.parameters(),\
+          \ lr=self.learning_rate\n            )\n            return optimizer\n\n\
+          \    class IMDBDataset(Dataset):\n        def __init__(self, dataset_dict,\
+          \ partition_key=\"train\"):\n            self.partition = dataset_dict[partition_key]\n\
+          \n        def __getitem__(self, index):\n            return self.partition[index]\n\
+          \n        def __len__(self):\n            return self.partition.num_rows\n\
+          \n    os.environ[\"TOKENIZERS_PARALLELISM\"] = \"false\"\n\n    train_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"train\")\n    val_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"validation\")\n    test_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"test\")\n\n    print(\n\
+          \        {\n            \"train_size\": len(train_dataset),\n          \
+          \  \"val_size\": len(val_dataset),\n            \"test_size\": len(test_dataset),\n\
+          \        }\n    )\n\n    train_dataloader = DataLoader(\n        dataset=train_dataset,\n\
+          \        batch_size=12,\n        shuffle=True,\n        num_workers=3,\n\
+          \        drop_last=True,\n    )\n\n    val_dataloader = DataLoader(\n  \
+          \      dataset=val_dataset,\n        batch_size=12,\n        num_workers=3,\n\
+          \        drop_last=True,\n    )\n\n    test_dataloader = DataLoader(\n \
+          \       dataset=test_dataset,\n        batch_size=12,\n        num_workers=3,\n\
+          \        drop_last=True,\n    )\n\n    model = AutoModel.from_pretrained(\"\
+          distilbert-base-uncased\")\n\n    lit_model = LightningModel(model)\n  \
+          \  print(lit_model)\n\n    callbacks = [\n        ModelCheckpoint(\n   \
+          \         dirpath=model_checkpoint_out.path,\n            save_top_k=1,\n\
+          \            mode=\"max\",\n            monitor=\"val_acc\",\n         \
+          \   verbose=True,\n            save_on_train_epoch_end=True,\n        )\
+          \  # save top 1 model\n    ]\n    logger = CSVLogger(save_dir=lit_logger_out.path,\
+          \ name=\"my-model\")\n\n    trainer = pl.Trainer(\n        max_epochs=2,\n\
+          \        callbacks=callbacks,\n        logger=logger,\n        log_every_n_steps=1,\n\
+          \        deterministic=True,\n    )\n\n    trainer.fit(\n        lit_model,\n\
+          \        train_dataloaders=train_dataloader,\n        val_dataloaders=val_dataloader,\n\
+          \    )\n\n    test_acc = trainer.test(lit_model, dataloaders=test_dataloader,\
+          \ verbose=True)\n    val_acc = trainer.test(lit_model, dataloaders=val_dataloader,\
+          \ verbose=True)\n    print(test_acc)\n\n    metrics_out.metadata[\"val_acc\"\
+          ] = val_acc\n    metrics_out.metadata[\"test_acc\"] = test_acc\n    metrics_out.metadata[\"\
+          best_ckpt\"] = trainer.ckpt_path\n\n    metrics_out.log_metric(\"val_acc\"\
+          , val_acc)\n    metrics_out.log_metric(\"test_acc\", test_acc)\n\n    trainer.save_checkpoint(lit_model_out.path,\
+          \ weights_only=True)\n\n"
+        image: gcr.io/deeplearning-platform-release/pytorch-gpu.2-0.py310
+        resources:
+          cpuLimit: 16.0
+          memoryLimit: 51.539607552
+pipelineInfo:
+  description: a kubeflow description
+  displayName: Kubeflow Trainer
+  name: kubefloww-trainer
+root:
+  dag:
+    outputs:
+      artifacts:
+        train-model-metrics_out:
+          artifactSelectors:
+          - outputArtifactKey: metrics_out
+            producerSubtask: train-model
+    tasks:
+      generate-dataset:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-generate-dataset
+        taskInfo:
+          name: generate-dataset
+      setup-dataloaders:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-setup-dataloaders
+        dependentTasks:
+        - generate-dataset
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: dataset_out
+                producerTask: generate-dataset
+        taskInfo:
+          name: setup-dataloaders
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - generate-dataset
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: dataset_out
+                producerTask: generate-dataset
+        taskInfo:
+          name: train-model
+  outputDefinitions:
+    artifacts:
+      train-model-metrics_out:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.4.0

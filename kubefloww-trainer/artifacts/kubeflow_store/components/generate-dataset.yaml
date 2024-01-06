@@ -1,0 +1,86 @@
+# PIPELINE DEFINITION
+# Name: setup-dataloaders
+# Inputs:
+#    dataset: system.Artifact
+components:
+  comp-setup-dataloaders:
+    executorLabel: exec-setup-dataloaders
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-setup-dataloaders:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - setup_dataloaders
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.4.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'transformers'\
+          \ 'lightning' 'torchmetrics' 'scikit-learn' 'black' 'datasets' 'torchserve'\
+          \ 'torch-model-archiver' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef setup_dataloaders(\n    dataset: Input[Artifact],\n):\n    import\
+          \ os\n    import torch\n    from datasets import load_dataset\n    from\
+          \ torch.utils.data import Dataset, DataLoader\n\n    class IMDBDataset(Dataset):\n\
+          \        def __init__(self, dataset_dict, partition_key=\"train\"):\n  \
+          \          self.partition = dataset_dict[partition_key]\n\n        def __getitem__(self,\
+          \ index):\n            return self.partition[index]\n\n        def __len__(self):\n\
+          \            return self.partition.num_rows\n\n    os.environ[\"TOKENIZERS_PARALLELISM\"\
+          ] = \"false\"\n    imdb_tokenized = load_dataset(dataset.path)\n\n    train_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"train\")\n    val_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"validation\")\n    test_dataset\
+          \ = IMDBDataset(imdb_tokenized, partition_key=\"test\")\n\n    train_loader\
+          \ = DataLoader(\n        dataset=train_dataset,\n        batch_size=12,\n\
+          \        shuffle=True,\n        num_workers=1,\n        drop_last=True,\n\
+          \    )\n\n    val_loader = DataLoader(\n        dataset=val_dataset,\n \
+          \       batch_size=12,\n        num_workers=1,\n        drop_last=True,\n\
+          \    )\n\n    test_loader = DataLoader(\n        dataset=test_dataset,\n\
+          \        batch_size=12,\n        num_workers=1,\n        drop_last=True,\n\
+          \    )\n\n"
+        image: python:3.11-slim
+pipelineInfo:
+  name: setup-dataloaders
+root:
+  dag:
+    tasks:
+      setup-dataloaders:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-setup-dataloaders
+        inputs:
+          artifacts:
+            dataset:
+              componentInputArtifact: dataset
+        taskInfo:
+          name: setup-dataloaders
+  inputDefinitions:
+    artifacts:
+      dataset:
+        artifactType:
+          schemaTitle: system.Artifact
+          schemaVersion: 0.0.1
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.4.0

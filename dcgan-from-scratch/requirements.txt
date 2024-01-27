@@ -1,0 +1,7 @@
+pandas
+lightning
+torchmetrics
+torchvision
+tensorboard
+
+black

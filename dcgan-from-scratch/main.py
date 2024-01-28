@@ -41,7 +41,7 @@ if __name__ == "__main__":
     )
 
     dataset = datasets.MNIST(
-        root="artifacts/dataset/",
+        root="training_data/dataset/",
         train=True,
         transform=custom_transforms,
         download=True,

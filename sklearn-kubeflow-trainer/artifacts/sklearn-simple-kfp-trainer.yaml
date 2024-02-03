@@ -1,0 +1,297 @@
+# PIPELINE DEFINITION
+# Name: sklearn-simple-kfp-trainer
+# Description: a simple demonstrating on a sklearn model trainer kfp pipeline
+# Inputs:
+#    alpha: float [Default: 0.5]
+#    csv_uri: str [Default: 'http://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv']
+#    l1_ratio: float [Default: 0.5]
+# Outputs:
+#    evaluate-model-val_metrics_out: system.Metrics
+#    train-model-train_metrics_out: system.Metrics
+components:
+  comp-download-dataset:
+    executorLabel: exec-download-dataset
+    inputDefinitions:
+      parameters:
+        csv_uri:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        train_dfx_out:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        val_dfx_out:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-evaluate-model:
+    executorLabel: exec-evaluate-model
+    inputDefinitions:
+      artifacts:
+        trained_model_in:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        val_dfx_in:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        val_metrics_out:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        train_dfx_in:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        alpha:
+          parameterType: NUMBER_DOUBLE
+        l1_ratio:
+          parameterType: NUMBER_DOUBLE
+    outputDefinitions:
+      artifacts:
+        model_out:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        train_metrics_out:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+defaultPipelineRoot: gs://kubeflow-out/sklearn-simple-kfp-trainer/
+deploymentSpec:
+  executors:
+    exec-download-dataset:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - download_dataset
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.6.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pyarrow' 'pandas'\
+          \ 'scikit-learn' 'lightning' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef download_dataset(\n    csv_uri: str,\n    train_dfx_out: Output[Dataset],\n\
+          \    val_dfx_out: Output[Dataset],\n):\n    import logging\n    import numpy\
+          \ as np\n    import pandas as pd\n\n    from sklearn.model_selection import\
+          \ train_test_split\n\n    logging.getLogger().setLevel(logging.INFO)\n\n\
+          \    CSV_URL = csv_uri\n    logging.info(\"received the CSV_URL = {}\".format(csv_uri))\n\
+          \n    try:\n        dfx = pd.read_csv(CSV_URL, sep=\";\")\n    except Exception\
+          \ as e:\n        logging.exception(\n            \"Unable to download training\
+          \ & test CSV, check your internet connection. Error: %s\",\n           \
+          \ e,\n        )\n\n    train_dfx, val_dfx = train_test_split(dfx, test_size=0.30,\
+          \ random_state=31)\n\n    logging.info(\n        {\n            \"train_dfx.shape\"\
+          : train_dfx.shape,\n            \"val_dfx.shape\": val_dfx.shape,\n    \
+          \    }\n    )\n\n    train_dfx.to_csv(train_dfx_out.path, index=False)\n\
+          \    val_dfx.to_csv(val_dfx_out.path, index=False)\n\n"
+        image: python:3.11-slim
+    exec-evaluate-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.6.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pyarrow' 'pandas'\
+          \ 'scikit-learn' 'lightning' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_model(\n    val_dfx_in: Input[Dataset],\n    trained_model_in:\
+          \ Input[Model],\n    val_metrics_out: Output[Metrics],\n):\n    import os\n\
+          \    import logging\n    import pandas as pd\n    import numpy as np\n \
+          \   import joblib\n\n    from datetime import datetime\n\n    from sklearn.linear_model\
+          \ import ElasticNet\n    from sklearn.metrics import mean_squared_error,\
+          \ mean_absolute_error, r2_score\n\n    logging.getLogger().setLevel(logging.INFO)\n\
+          \n    val_dfx = pd.read_csv(val_dfx_in.path)\n    val_x = val_dfx.drop([\"\
+          quality\"], axis=1)\n    val_y = val_dfx[[\"quality\"]]\n\n    model = joblib.load(f\"\
+          {trained_model_in.path}.joblib\")\n\n    logging.info(\"starting the model\
+          \ evaluation metrics\")\n    preds = model.predict(val_x)\n\n    def eval_metrics(preds,\
+          \ actual):\n        rmse = np.sqrt(mean_squared_error(actual, preds))\n\
+          \        mae = mean_absolute_error(actual, preds)\n        r2 = r2_score(actual,\
+          \ preds)\n\n        return (rmse, mae, r2)\n\n    (rmse, mae, r2) = eval_metrics(preds,\
+          \ val_y)\n\n    val_metrics_out.log_metric(\"val.rmse\", rmse)\n    val_metrics_out.log_metric(\"\
+          val.mae\", mae)\n    val_metrics_out.log_metric(\"val.r2\", r2)\n    val_metrics_out.log_metric(\"\
+          trainedOn\", datetime.now().strftime(\"%D-%M-%Y %H:%M\"))\n\n    logging.info(\"\
+          model evaluation has been done\")\n\n"
+        image: python:3.11-slim
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.6.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pyarrow' 'pandas'\
+          \ 'scikit-learn' 'lightning' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    alpha: float,\n    l1_ratio: float,\n    train_dfx_in:\
+          \ Input[Dataset],\n    model_out: Output[Model],\n    train_metrics_out:\
+          \ Output[Metrics],\n):\n    import os\n    import logging\n    import pandas\
+          \ as pd\n\n    import numpy as np\n    from joblib import dump\n    from\
+          \ sklearn.linear_model import ElasticNet\n    from sklearn.metrics import\
+          \ mean_squared_error, mean_absolute_error, r2_score\n\n    logging.getLogger().setLevel(logging.INFO)\n\
+          \n    train_dfx = pd.read_csv(train_dfx_in.path)\n\n    train_x = train_dfx.drop([\"\
+          quality\"], axis=1)\n    train_y = train_dfx[[\"quality\"]]\n\n    alpha\
+          \ = 0.5 if float(alpha) is None else float(alpha)\n    l1_ratio = 0.5 if\
+          \ float(alpha) is None else float(alpha)\n\n    logging.info(\"starting\
+          \ the model training job\")\n    model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio,\
+          \ random_state=31)\n    model.fit(train_x, train_y)\n    logging.info(\"\
+          the model training job has been finished\")\n\n    preds = model.predict(train_x)\n\
+          \n    def eval_metrics(preds, actual):\n        rmse = np.sqrt(mean_squared_error(actual,\
+          \ preds))\n        mae = mean_absolute_error(actual, preds)\n        r2\
+          \ = r2_score(actual, preds)\n\n        return (rmse, mae, r2)\n\n    (rmse,\
+          \ mae, r2) = eval_metrics(preds, train_y)\n\n    model_out.metadata[\"train_rmse\"\
+          ] = rmse\n    model_out.metadata[\"train_mae\"] = mae\n    model_out.metadata[\"\
+          train_r2\"] = r2\n\n    train_metrics_out.log_metric(\"train.rmse\", rmse)\n\
+          \    train_metrics_out.log_metric(\"train.mae\", mae)\n    train_metrics_out.log_metric(\"\
+          train.r2\", r2)\n\n    dump(model, filename=f\"{model_out.path}.joblib\"\
+          )\n    logging.info(\"training metrics has been written...\")\n\n"
+        image: python:3.11-slim
+pipelineInfo:
+  description: a simple demonstrating on a sklearn model trainer kfp pipeline
+  name: sklearn-simple-kfp-trainer
+root:
+  dag:
+    outputs:
+      artifacts:
+        evaluate-model-val_metrics_out:
+          artifactSelectors:
+          - outputArtifactKey: val_metrics_out
+            producerSubtask: evaluate-model
+        train-model-train_metrics_out:
+          artifactSelectors:
+          - outputArtifactKey: train_metrics_out
+            producerSubtask: train-model
+    tasks:
+      download-dataset:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-download-dataset
+        inputs:
+          parameters:
+            csv_uri:
+              componentInputParameter: csv_uri
+        taskInfo:
+          name: download-dataset
+      evaluate-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluate-model
+        dependentTasks:
+        - download-dataset
+        - train-model
+        inputs:
+          artifacts:
+            trained_model_in:
+              taskOutputArtifact:
+                outputArtifactKey: model_out
+                producerTask: train-model
+            val_dfx_in:
+              taskOutputArtifact:
+                outputArtifactKey: val_dfx_out
+                producerTask: download-dataset
+        taskInfo:
+          name: evaluate-model
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - download-dataset
+        inputs:
+          artifacts:
+            train_dfx_in:
+              taskOutputArtifact:
+                outputArtifactKey: train_dfx_out
+                producerTask: download-dataset
+          parameters:
+            alpha:
+              componentInputParameter: alpha
+            l1_ratio:
+              componentInputParameter: l1_ratio
+        taskInfo:
+          name: train-model
+  inputDefinitions:
+    parameters:
+      alpha:
+        defaultValue: 0.5
+        parameterType: NUMBER_DOUBLE
+      csv_uri:
+        defaultValue: http://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv
+        parameterType: STRING
+      l1_ratio:
+        defaultValue: 0.5
+        parameterType: NUMBER_DOUBLE
+  outputDefinitions:
+    artifacts:
+      evaluate-model-val_metrics_out:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      train-model-train_metrics_out:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.6.0

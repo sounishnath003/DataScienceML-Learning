@@ -1,0 +1,148 @@
+# PIPELINE DEFINITION
+# Name: train-model
+# Inputs:
+#    alpha: float
+#    l1_ratio: float
+#    train_dfx_in: system.Dataset
+# Outputs:
+#    model_out: system.Model
+#    train-model-train_metrics_out: system.Metrics
+#    train_metrics_out: system.Metrics
+components:
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        train_dfx_in:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        alpha:
+          parameterType: NUMBER_DOUBLE
+        l1_ratio:
+          parameterType: NUMBER_DOUBLE
+    outputDefinitions:
+      artifacts:
+        model_out:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        train_metrics_out:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.6.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pyarrow' 'pandas'\
+          \ 'scikit-learn' 'lightning' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    alpha: float,\n    l1_ratio: float,\n    train_dfx_in:\
+          \ Input[Dataset],\n    model_out: Output[Model],\n    train_metrics_out:\
+          \ Output[Metrics],\n):\n    import os\n    import logging\n    import pandas\
+          \ as pd\n\n    import numpy as np\n    from joblib import dump\n    from\
+          \ sklearn.linear_model import ElasticNet\n    from sklearn.metrics import\
+          \ mean_squared_error, mean_absolute_error, r2_score\n\n    logging.getLogger().setLevel(logging.INFO)\n\
+          \n    train_dfx = pd.read_csv(train_dfx_in.path)\n\n    train_x = train_dfx.drop([\"\
+          quality\"], axis=1)\n    train_y = train_dfx[[\"quality\"]]\n\n    alpha\
+          \ = 0.5 if float(alpha) is None else float(alpha)\n    l1_ratio = 0.5 if\
+          \ float(alpha) is None else float(alpha)\n\n    logging.info(\"starting\
+          \ the model training job\")\n    model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio,\
+          \ random_state=31)\n    model.fit(train_x, train_y)\n    logging.info(\"\
+          the model training job has been finished\")\n\n    preds = model.predict(train_x)\n\
+          \n    def eval_metrics(preds, actual):\n        rmse = np.sqrt(mean_squared_error(actual,\
+          \ preds))\n        mae = mean_absolute_error(actual, preds)\n        r2\
+          \ = r2_score(actual, preds)\n\n        return (rmse, mae, r2)\n\n    (rmse,\
+          \ mae, r2) = eval_metrics(preds, train_y)\n\n    model_out.metadata[\"train_rmse\"\
+          ] = rmse\n    model_out.metadata[\"train_mae\"] = mae\n    model_out.metadata[\"\
+          train_r2\"] = r2\n\n    train_metrics_out.log_metric(\"train.rmse\", rmse)\n\
+          \    train_metrics_out.log_metric(\"train.mae\", mae)\n    train_metrics_out.log_metric(\"\
+          train.r2\", r2)\n\n    dump(model, filename=f\"{model_out.path}.joblib\"\
+          )\n    logging.info(\"training metrics has been written...\")\n\n"
+        image: python:3.11-slim
+pipelineInfo:
+  name: train-model
+root:
+  dag:
+    outputs:
+      artifacts:
+        model_out:
+          artifactSelectors:
+          - outputArtifactKey: model_out
+            producerSubtask: train-model
+        train-model-train_metrics_out:
+          artifactSelectors:
+          - outputArtifactKey: train_metrics_out
+            producerSubtask: train-model
+        train_metrics_out:
+          artifactSelectors:
+          - outputArtifactKey: train_metrics_out
+            producerSubtask: train-model
+    tasks:
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        inputs:
+          artifacts:
+            train_dfx_in:
+              componentInputArtifact: train_dfx_in
+          parameters:
+            alpha:
+              componentInputParameter: alpha
+            l1_ratio:
+              componentInputParameter: l1_ratio
+        taskInfo:
+          name: train-model
+  inputDefinitions:
+    artifacts:
+      train_dfx_in:
+        artifactType:
+          schemaTitle: system.Dataset
+          schemaVersion: 0.0.1
+    parameters:
+      alpha:
+        parameterType: NUMBER_DOUBLE
+      l1_ratio:
+        parameterType: NUMBER_DOUBLE
+  outputDefinitions:
+    artifacts:
+      model_out:
+        artifactType:
+          schemaTitle: system.Model
+          schemaVersion: 0.0.1
+      train-model-train_metrics_out:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      train_metrics_out:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.6.0

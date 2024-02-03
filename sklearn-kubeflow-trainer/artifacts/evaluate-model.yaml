@@ -1,0 +1,124 @@
+# PIPELINE DEFINITION
+# Name: evaluate-model
+# Inputs:
+#    trained_model_in: system.Model
+#    val_dfx_in: system.Dataset
+# Outputs:
+#    evaluate-model-val_metrics_out: system.Metrics
+#    val_metrics_out: system.Metrics
+components:
+  comp-evaluate-model:
+    executorLabel: exec-evaluate-model
+    inputDefinitions:
+      artifacts:
+        trained_model_in:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        val_dfx_in:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        val_metrics_out:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-evaluate-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.6.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pyarrow' 'pandas'\
+          \ 'scikit-learn' 'lightning' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_model(\n    val_dfx_in: Input[Dataset],\n    trained_model_in:\
+          \ Input[Model],\n    val_metrics_out: Output[Metrics],\n):\n    import os\n\
+          \    import logging\n    import pandas as pd\n    import numpy as np\n \
+          \   import joblib\n\n    from datetime import datetime\n\n    from sklearn.linear_model\
+          \ import ElasticNet\n    from sklearn.metrics import mean_squared_error,\
+          \ mean_absolute_error, r2_score\n\n    logging.getLogger().setLevel(logging.INFO)\n\
+          \n    val_dfx = pd.read_csv(val_dfx_in.path)\n    val_x = val_dfx.drop([\"\
+          quality\"], axis=1)\n    val_y = val_dfx[[\"quality\"]]\n\n    model = joblib.load(f\"\
+          {trained_model_in.path}.joblib\")\n\n    logging.info(\"starting the model\
+          \ evaluation metrics\")\n    preds = model.predict(val_x)\n\n    def eval_metrics(preds,\
+          \ actual):\n        rmse = np.sqrt(mean_squared_error(actual, preds))\n\
+          \        mae = mean_absolute_error(actual, preds)\n        r2 = r2_score(actual,\
+          \ preds)\n\n        return (rmse, mae, r2)\n\n    (rmse, mae, r2) = eval_metrics(preds,\
+          \ val_y)\n\n    val_metrics_out.log_metric(\"val.rmse\", rmse)\n    val_metrics_out.log_metric(\"\
+          val.mae\", mae)\n    val_metrics_out.log_metric(\"val.r2\", r2)\n    val_metrics_out.log_metric(\"\
+          trainedOn\", datetime.now().strftime(\"%D-%M-%Y %H:%M\"))\n\n    logging.info(\"\
+          model evaluation has been done\")\n\n"
+        image: python:3.11-slim
+pipelineInfo:
+  name: evaluate-model
+root:
+  dag:
+    outputs:
+      artifacts:
+        evaluate-model-val_metrics_out:
+          artifactSelectors:
+          - outputArtifactKey: val_metrics_out
+            producerSubtask: evaluate-model
+        val_metrics_out:
+          artifactSelectors:
+          - outputArtifactKey: val_metrics_out
+            producerSubtask: evaluate-model
+    tasks:
+      evaluate-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluate-model
+        inputs:
+          artifacts:
+            trained_model_in:
+              componentInputArtifact: trained_model_in
+            val_dfx_in:
+              componentInputArtifact: val_dfx_in
+        taskInfo:
+          name: evaluate-model
+  inputDefinitions:
+    artifacts:
+      trained_model_in:
+        artifactType:
+          schemaTitle: system.Model
+          schemaVersion: 0.0.1
+      val_dfx_in:
+        artifactType:
+          schemaTitle: system.Dataset
+          schemaVersion: 0.0.1
+  outputDefinitions:
+    artifacts:
+      evaluate-model-val_metrics_out:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      val_metrics_out:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.6.0

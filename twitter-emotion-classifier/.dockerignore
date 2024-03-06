@@ -1,0 +1,11 @@
+venv
+__pycache__
+.ipynb_checkpoints
+logs
+Dockerfile
+.dockerignore
+.gitignore
+.git
+build
+dist
+*.whl

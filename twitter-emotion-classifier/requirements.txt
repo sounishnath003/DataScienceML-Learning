@@ -1,0 +1,8 @@
+datasets
+torchmetrics
+black
+transformers
+lightning
+loguru
+tensorboard
+wheel

@@ -1,0 +1,11 @@
+lightning
+pyarrow
+pandas
+scikit-learn
+transformers
+torchmetrics
+mlflow
+loguru
+google-cloud-storage
+pyspark
+delta

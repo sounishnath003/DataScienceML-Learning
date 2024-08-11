@@ -1,0 +1,8 @@
+langchain
+langchain_community
+docx2txt
+tiktoken
+transformers
+torch
+langchain-chroma
+black

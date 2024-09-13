@@ -1,0 +1,91 @@
+# * coding utf-8 *
+# @author: @github/sounishnath003
+# createdAt: 13-09-2024
+
+main:
+  params: [args]
+  steps:
+    - defineVariables:
+        assign:
+          - datasetId: "sample_dataset"
+          - projectId: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - serviceAccountName: ${sys.get_env("GOOGLE_CLOUD_SERVICE_ACCOUNT_NAME")}
+          - workflowExecutionId: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+          - tableId: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+
+    - createTempDataTable:
+        call: googleapis.bigquery.v2.tables.insert
+        args:
+          datasetId: ${datasetId}
+          projectId: ${projectId}
+          body:
+            description: "sample dataset table created for the bulk export generation for the dataset"
+            externalDataConfiguration:
+              autodetect: false
+              csvOptions:
+                allowQuotedNewlines: true
+                encoding: UTF-8
+                fieldDelimeter: ","
+                skipLeadingRows: 1
+                ignoreUnknownValues: true
+              sourceFormat: CSV
+              sourceUris:
+                - ${args.inputGcsFileUri}
+            friendlyName: ${tableId}
+            location: "asia-south1"
+            tableReference:
+              datasetId: ${datasetId}
+              projectId: ${projectId}
+              tableId: ${tableId}
+            type: TABLE
+            schema:
+              fields:
+                - name: hostname
+                  type: STRING
+                  mode: REQUIRED
+            labels:
+              reason: to-create-table
+              author-name: sounishnath
+        result: insertResult
+
+    - prepareBulkExportJob:
+        call: googleapis.bigquery.v2.jobs.query
+        args:
+          projectId: ${projectId}
+          body:
+            defaultDataset:
+              datasetId: ${datasetId}
+              projectId: ${projectId}
+            labels:
+              author: sounish-nath
+              reason: ${"job_export_" + tableId }
+            location: "asia-south1"
+            query: |
+              DECLARE tableName STRING;
+              SET tableName = @table;                           
+
+              EXECUTE IMMEDIATE CONCAT('EXPORT DATA OPTIONS (uri ="', @outputGcsUri, '"' , ', format = "CSV", compression = "GZIP", overwrite = true, header = true, field_delimiter = ";") AS ( SELECT hostname as original, upper(hostname) as upperHostname FROM `', tableName, '`', " LIMIT 10)");
+            queryParameters:
+              - name: outputGcsUri
+                parameterType:
+                  type: STRING
+                parameterValue:
+                  value: "gs://sounish-cloud-workstation/data/bq-export/export-hosts-*.csv.gzip"
+              - name: table
+                parameterType:
+                  type: STRING
+                parameterValue:
+                  value: ${tableId}
+              - name: limit
+                parameterType:
+                  type: INT64
+                parameterValue:
+                  value: 100
+            useLegacySql: false
+            useQueryCache: true
+        result: queryResult
+
+    - outputs:
+        return:
+          insertResult: ${insertResult}
+          queryResult: ${queryResult}

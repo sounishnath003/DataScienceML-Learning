@@ -1,4 +1,5 @@
 import torch
+import json
 from pprint import pformat
 import warnings
 from typing import List
@@ -140,11 +141,14 @@ if __name__ == "__main__":
         answers.append(
             
                 {
-                    "query": query,
                     "sentence": sentences[index],
                     "score": score.item(),
                 }
             )
     
     
-    log("answers", pformat(answers, indent=4))
+    log("answers", json.dumps({
+        "query": query,
+        "similarSearchs": answers,
+        "topK": 3,
+    }, indent=4))

@@ -1,4 +1,3 @@
-""" Sentence Similarity. using Simple Transformers - Distilbert - Sounish Nath """
 import torch
 from pprint import pformat
 import warnings
@@ -31,17 +30,46 @@ def tokenize(model: PreTrainedTokenizer, sentence: str, max_length: int = 64):
         return tokenized
 
 
+def get_query_embeddings(tokenizer:PreTrainedTokenizer, model:AutoModel, query:str):
+    with torch.no_grad():
+        query_tokens = tokenize(tokenizer_model, query)
+        query_input_ids = query_tokens["input_ids"]
+        query_attn_mask = query_tokens["attention_mask"]
+        query_embeddings =model.forward(
+            input_ids=query_tokens["input_ids"],
+            attention_mask=query_tokens["attention_mask"],
+        ).last_hidden_state
+
+        # exapand the attn_mask to match the dimension of embeddings
+        query_attn_mask = query_attn_mask.unsqueeze(-1).expand(query_embeddings.size())
+        log("modified.attn.mask.size", query_attn_mask.size())
+
+        # mask_embddings
+        mask_query_embeddings = torch.mul(query_embeddings, query_attn_mask)
+        log("masked.query_embeddings", mask_query_embeddings.size())
+
+        # sum the query_embeddings along the sequence dimension
+        summed = torch.sum(mask_query_embeddings, dim=1)
+        log("summed", summed.size())
+
+        # calculate the mean
+        query_mean_pooled = torch.div(summed, torch.clamp(query_attn_mask.sum(1), min=1e-9))
+        log("mean.pooled", mean_pooled)
+        log("mean.pooled", mean_pooled.size())
+
+        return query_mean_pooled
+    
+
+
 if __name__ == "__main__":
     warnings.filterwarnings("ignore")
     tokenizer_model = AutoTokenizer.from_pretrained("distilbert-base-uncased")
     model = AutoModel.from_pretrained("distilbert-base-uncased")
 
     sentences = [
-        "This is a test sentence.",
-        "This is another test sentence.",
-        "This is a third test sentence.",
-        "This is a fourth test sentence.",
-        "This is a fifth test sentence.",
+        "Sounish is a highly motivated software engineer leveraging cloud, data, and AI to solve complex challenges.",
+        "Sounish also, skilled in a variety of programming languages, libraries, and frameworks, including Python, JavaScript, Go, Java, PyTorch, Angular, Node.js, and more. He also has experience with a variety of tools and platforms, such as Git, Docker, and Kubernetes.",
+        "Ram is a principle software engineer, but works only Finance domain. he changed his career objective. not a SWE anymore."
     ]
 
     log("sentences", sentences[:])
@@ -74,7 +102,6 @@ if __name__ == "__main__":
             input_ids=input_ids_tokens, attention_mask=attn_mask_tokens
         )
         embeddings = model_out.last_hidden_state
-        log("embeddings", embeddings)
         log("embeddings.size", embeddings.size())
 
     # exapand the attn_mask to match the dimension of embeddings
@@ -94,22 +121,26 @@ if __name__ == "__main__":
     log("mean.pooled", mean_pooled)
     log("mean.pooled", mean_pooled.size())
 
+    # calculate the cosine similarity
     cosine_similar_chk = torch.nn.CosineSimilarity(dim=1)
 
-    query_index = -1
+    # query embeddings generator
+    query = "What are tools and technologies Sounish works on?"
+    query_meanpool_embeddings=get_query_embeddings(tokenizer_model, model, query)
+    log("query.meanpool.embeddings", query_meanpool_embeddings.size())
+
+    # similarity calculations
     similarity_scores = cosine_similar_chk.forward(
-        mean_pooled[query_index].squeeze(0), mean_pooled
+        query_meanpool_embeddings.squeeze(0), mean_pooled
     )
     log("similarity_scores", similarity_scores)
 
     answers = []
     for index, score in enumerate(similarity_scores):
-        if index == query_index:
-            continue
         answers.append(
             
                 {
-                    "query": sentences[query_index],
+                    "query": query,
                     "sentence": sentences[index],
                     "score": score.item(),
                 }
